@@ -9,10 +9,12 @@ import type {
   PenilaianItem,
   StatusBerkas,
   TahapSupervisi,
+  TargetMapelAspek,
   TipePenilaianAspek,
   UserAccount,
   UserRole,
 } from '../types';
+import { getDefaultBkAspekByTahap } from '../types';
 import { buildRekap, createDefaultSeedData } from './firestoreDb';
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
@@ -243,14 +245,20 @@ export async function fetchSupabaseState(): Promise<AppDatabasePayload> {
     rows
       .filter((r) => r.tahap === tahap)
       .sort((a, b) => Number(a.order_index || 0) - Number(b.order_index || 0))
-      .map((r) => ({
-        id: String(r.id),
-        kelompok: String(r.kelompok),
-        aspek: String(r.aspek),
-        kategoriDeskripsi: String(r.kategori_deskripsi || ''),
-        tipePenilaian: (r.tipe_penilaian === 'teks' ? 'teks' : 'skor') as TipePenilaianAspek,
-        orderIndex: Number(r.order_index || 0),
-      }));
+      .map((r) => {
+        const id = String(r.id);
+        const targetMapel: TargetMapelAspek =
+          r.target_mapel === 'BK' || id.startsWith('BK_') ? 'BK' : 'Umum';
+        return {
+          id,
+          kelompok: String(r.kelompok),
+          aspek: String(r.aspek),
+          kategoriDeskripsi: String(r.kategori_deskripsi || ''),
+          tipePenilaian: (r.tipe_penilaian === 'teks' ? 'teks' : 'skor') as TipePenilaianAspek,
+          targetMapel,
+          orderIndex: Number(r.order_index || 0),
+        };
+      });
 
   const aspekRows = (aspekData || []) as Array<Record<string, unknown>>;
   const aspekPersiapan = mapAspek(aspekRows, 'Persiapan');
@@ -522,9 +530,12 @@ export async function savePenilaianSb(params: {
     .eq('tahap', params.tahap);
   if (delErr) throw new Error(delErr.message);
 
+  const fallbackBk = getDefaultBkAspekByTahap(params.tahap);
+
   const rows = params.items.map((item) => {
     const def = (aspekList || []).find((a) => a.id === item.idAspek);
-    const isText = def?.tipe_penilaian === 'teks';
+    const fallbackDef = fallbackBk.find((a) => a.id === item.idAspek);
+    const isText = (def?.tipe_penilaian ?? fallbackDef?.tipePenilaian) === 'teks';
     return {
       id: `${cleanKey(params.guru.id || params.guru.nip)}_${params.tahap}_${cleanKey(item.idAspek)}`,
       guru_id: params.guru.id,
@@ -583,6 +594,7 @@ export async function saveAspekSb(
       : tahap === 'Evaluasi'
       ? 'teks'
       : 'skor';
+  const isBK = input.targetMapel === 'BK' || Boolean(input.id && input.id.startsWith('BK_'));
 
   if (input.id) {
     const { error } = await sb
@@ -597,8 +609,11 @@ export async function saveAspekSb(
     if (error) throw new Error(error.message);
   } else {
     const maxOrder = existingList.reduce((m, item) => Math.max(m, item.orderIndex || 0), existingList.length);
+    const newId = isBK
+      ? `BK_${prefix}${Date.now().toString().slice(-5)}`
+      : `${prefix}${Date.now().toString().slice(-5)}`;
     const { error } = await sb.from('sadig_aspek').insert({
-      id: `${prefix}${Date.now().toString().slice(-5)}`,
+      id: newId,
       tahap,
       kelompok: (input.kelompok || 'UMUM').trim(),
       aspek: (input.aspek || '').trim(),
@@ -609,6 +624,25 @@ export async function saveAspekSb(
     if (error) throw new Error(error.message);
   }
 
+  return fetchSupabaseState();
+}
+
+export async function seedBkAspekSb(): Promise<AppDatabasePayload> {
+  const sb = getClient();
+  const stages: TahapSupervisi[] = ['Persiapan', 'Pelaksanaan', 'Evaluasi'];
+  const rows = stages.flatMap((tahap) =>
+    getDefaultBkAspekByTahap(tahap).map((a, idx) => ({
+      id: a.id,
+      tahap,
+      kelompok: a.kelompok,
+      aspek: a.aspek,
+      kategori_deskripsi: a.kategoriDeskripsi,
+      tipe_penilaian: a.tipePenilaian || 'skor',
+      order_index: a.orderIndex ?? 100 + idx + 1,
+    }))
+  );
+  const { error } = await sb.from('sadig_aspek').upsert(rows, { onConflict: 'id' });
+  if (error) throw new Error(error.message);
   return fetchSupabaseState();
 }
 

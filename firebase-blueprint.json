@@ -87,6 +87,7 @@
         "aspek": { "type": "string", "minLength": 2, "maxLength": 300 },
         "kategoriDeskripsi": { "type": "string", "maxLength": 1000 },
         "tipePenilaian": { "type": "string", "enum": ["skor", "teks"] },
+        "targetMapel": { "type": "string", "enum": ["Umum", "BK"] },
         "orderIndex": { "type": "number" },
         "publicCatalog": { "type": "boolean" },
         "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },

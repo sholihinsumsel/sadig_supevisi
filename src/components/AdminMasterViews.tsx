@@ -19,9 +19,16 @@ import type {
   GuruRecord,
   PengaturanSekolah,
   TahapSupervisi,
+  TargetMapelAspek,
   TipePenilaianAspek,
   UserAccount,
   UserRole,
+} from '../types';
+import {
+  DEFAULT_BK_ASPEK_EVALUASI,
+  DEFAULT_BK_ASPEK_PELAKSANAAN,
+  DEFAULT_BK_ASPEK_PERSIAPAN,
+  resolveAspekTargetMapel,
 } from '../types';
 import { PemdaCrestSvg, TutWuriCrestSvg } from './SchoolCrest';
 import {
@@ -33,6 +40,7 @@ import {
   saveDirectoryUserClient,
   saveGuruClient,
   savePengaturanClient,
+  seedBkTemplateClient,
 } from '../services/sadigClient';
 
 interface AdminMasterProps {
@@ -56,6 +64,7 @@ export function AdminMasterViews({
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // === DATA ASPEK STATE ===
+  const [aspekMapelFilter, setAspekMapelFilter] = useState<TargetMapelAspek>('Umum');
   const [aspekTab, setAspekTab] = useState<TahapSupervisi>('Persiapan');
   const [aspekModal, setAspekModal] = useState(false);
   const [aspekForm, setAspekForm] = useState<Partial<AspekItem>>({});
@@ -182,18 +191,50 @@ export function AdminMasterViews({
       ? data.aspekPelaksanaan
       : data.aspekEvaluasi;
 
+  const hasDbBkAspects =
+    data.aspekPersiapan.some((a) => resolveAspekTargetMapel(a) === 'BK') ||
+    data.aspekPelaksanaan.some((a) => resolveAspekTargetMapel(a) === 'BK') ||
+    data.aspekEvaluasi.some((a) => resolveAspekTargetMapel(a) === 'BK');
+
+  const filteredAspekList = activeAspekList.filter(
+    (a) => resolveAspekTargetMapel(a) === aspekMapelFilter
+  );
+
+  const displayAspekList =
+    aspekMapelFilter === 'BK' && filteredAspekList.length === 0
+      ? aspekTab === 'Persiapan'
+        ? DEFAULT_BK_ASPEK_PERSIAPAN
+        : aspekTab === 'Pelaksanaan'
+        ? DEFAULT_BK_ASPEK_PELAKSANAAN
+        : DEFAULT_BK_ASPEK_EVALUASI
+      : filteredAspekList;
+
+  const isPreviewDefaultBk = aspekMapelFilter === 'BK' && filteredAspekList.length === 0;
+
   function openAspekModal(item?: AspekItem) {
     if (item) {
       setAspekForm({
         ...item,
+        targetMapel: resolveAspekTargetMapel(item),
         tipePenilaian: item.tipePenilaian || (aspekTab === 'Evaluasi' ? 'teks' : 'skor'),
       });
     } else {
+      const defaultKelompok =
+        aspekMapelFilter === 'BK'
+          ? aspekTab === 'Persiapan'
+            ? 'I. ADMINISTRASI PERENCANAAN (PROGRAM)'
+            : aspekTab === 'Pelaksanaan'
+            ? 'II. ADMINISTRASI PELAKSANAAN LAYANAN'
+            : 'III. ADMINISTRASI EVALUASI & TINDAK LANJUT'
+          : displayAspekList[0]?.kelompok || 'I. IDENTITAS & PERENCANAAN';
+      const defaultTipe: TipePenilaianAspek =
+        aspekMapelFilter === 'BK' ? 'skor' : aspekTab === 'Evaluasi' ? 'teks' : 'skor';
       setAspekForm({
-        kelompok: activeAspekList[0]?.kelompok || 'I. IDENTITAS & PERENCANAAN',
+        kelompok: defaultKelompok,
         aspek: '',
         kategoriDeskripsi: '',
-        tipePenilaian: aspekTab === 'Evaluasi' ? 'teks' : 'skor',
+        tipePenilaian: defaultTipe,
+        targetMapel: aspekMapelFilter,
       });
     }
     setAspekModal(true);
@@ -220,6 +261,26 @@ export function AdminMasterViews({
       await onActionSuccess(updated, 'Aspek penilaian berhasil dihapus.');
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Gagal menghapus aspek.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadBkTemplate() {
+    setBusy(true);
+    try {
+      const allIds = [
+        ...data.aspekPersiapan.map((a) => a.id),
+        ...data.aspekPelaksanaan.map((a) => a.id),
+        ...data.aspekEvaluasi.map((a) => a.id),
+      ];
+      const updated = await seedBkTemplateClient(allIds, ownerUid);
+      await onActionSuccess(
+        updated,
+        'Template Instrumen Administrasi BK berhasil dimuat ke database.'
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal memuat template instrumen BK.');
     } finally {
       setBusy(false);
     }
@@ -489,12 +550,30 @@ export function AdminMasterViews({
                   <input
                     type="text"
                     required
+                    list="mapel-suggestions"
                     value={guruForm.mataPelajaran || ''}
                     onChange={(e) =>
                       setGuruForm({ ...guruForm, mataPelajaran: e.target.value })
                     }
+                    placeholder="Contoh: Matematika atau Bimbingan dan Konseling (BK)"
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
                   />
+                  <datalist id="mapel-suggestions">
+                    <option value="Bimbingan dan Konseling (BK)" />
+                    <option value="BK" />
+                    <option value="Matematika" />
+                    <option value="Bahasa Indonesia" />
+                    <option value="Bahasa Inggris" />
+                    <option value="IPA Terpadu" />
+                    <option value="IPS" />
+                    <option value="PPKn" />
+                    <option value="Informatika" />
+                    <option value="PJOK" />
+                  </datalist>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Isikan <strong>Bimbingan dan Konseling (BK)</strong> atau <strong>BK</strong>{' '}
+                    agar supervisor otomatis menerima instrumen Administrasi BK.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -567,43 +646,84 @@ export function AdminMasterViews({
   if (section === 'aspek') {
     return (
       <div className="space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              Data Aspek Instrumen Kurikulum Merdeka
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Atur indikator penilaian untuk Persiapan, Pelaksanaan (Skala 1–4), dan Evaluasi
-              (Manual Teks Dialog Refleksi atau Skala 1–4)
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
-              {(['Persiapan', 'Pelaksanaan', 'Evaluasi'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setAspekTab(t)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                    aspekTab === t
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Aspek {t}
-                </button>
-              ))}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Data Aspek Instrumen Kurikulum Merdeka
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Atur indikator penilaian sesuai role mata pelajaran (Guru Mapel Umum vs Guru BK).
+              </p>
             </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                {(
+                  [
+                    { id: 'Umum', label: 'Mapel Umum' },
+                    { id: 'BK', label: 'Guru BK' },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setAspekMapelFilter(m.id)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
+                      aspekMapelFilter === m.id
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
 
-            <button
-              type="button"
-              onClick={() => openAspekModal()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Tambah Aspek</span>
-            </button>
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                {(['Persiapan', 'Pelaksanaan', 'Evaluasi'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setAspekTab(t)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                      aspekTab === t
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Aspek {t}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => openAspekModal()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Aspek</span>
+              </button>
+            </div>
           </div>
+
+          {aspekMapelFilter === 'BK' && !hasDbBkAspects && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-emerald-900">
+                <strong>Template Instrumen Administrasi BK Aktif Otomatis.</strong> Untuk mengubah
+                atau menambah indikator BK secara permanen di database, klik tombol di samping.
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={loadBkTemplate}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold whitespace-nowrap disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{busy ? 'Memuat...' : 'Simpan Template BK ke Database'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -611,16 +731,16 @@ export function AdminMasterViews({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                  <th className="py-3 px-4 w-20">ID</th>
-                  <th className="py-3 px-4 w-48">Kelompok Elemen</th>
+                  <th className="py-3 px-4 w-24">ID</th>
+                  <th className="py-3 px-4 w-52">Kelompok Elemen</th>
                   <th className="py-3 px-4">Aspek Penilaian</th>
                   <th className="py-3 px-4">Kategori / Deskripsi</th>
-                  <th className="py-3 px-4 w-44">Mode Penilaian</th>
+                  <th className="py-3 px-4 w-48">Mode Penilaian</th>
                   <th className="py-3 px-4 text-right w-24">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm">
-                {activeAspekList.map((a) => {
+                {displayAspekList.map((a) => {
                   const isText = a.tipePenilaian === 'teks';
                   return (
                     <tr key={a.id} className="hover:bg-slate-50/70 align-top">
@@ -634,29 +754,37 @@ export function AdminMasterViews({
                       <td className="py-3 px-4 text-xs text-slate-600">{a.kategoriDeskripsi}</td>
                       <td className="py-3 px-4 text-xs font-semibold">
                         {isText ? (
-                          <span className="text-sky-700">Manual Teks (Dialog Refleksi)</span>
+                          <span className="text-sky-700">
+                            {aspekMapelFilter === 'BK'
+                              ? 'Kondisi Fasilitas (Layak/Ada)'
+                              : 'Manual Teks (Dialog Refleksi)'}
+                          </span>
                         ) : (
                           <span className="text-slate-700">Skala Skor (1–4)</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openAspekModal(a)}
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => removeAspek(a.id)}
-                            className="p-1.5 rounded-lg border border-slate-200 text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {isPreviewDefaultBk ? (
+                          <span className="text-[11px] text-slate-400">Bawaan</span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openAspekModal(a)}
+                              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => removeAspek(a.id)}
+                              className="p-1.5 rounded-lg border border-slate-200 text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -682,6 +810,25 @@ export function AdminMasterViews({
                 </button>
               </div>
               <form onSubmit={submitAspek} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Peruntukan Role Mata Pelajaran
+                  </label>
+                  <select
+                    disabled={Boolean(aspekForm.id)}
+                    value={aspekForm.targetMapel || aspekMapelFilter}
+                    onChange={(e) =>
+                      setAspekForm({
+                        ...aspekForm,
+                        targetMapel: e.target.value as TargetMapelAspek,
+                      })
+                    }
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:bg-slate-100"
+                  >
+                    <option value="Umum">Mapel Umum (Semua Guru Mata Pelajaran)</option>
+                    <option value="BK">Khusus Guru BK (Bimbingan dan Konseling)</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Kelompok / Bagian
@@ -735,12 +882,12 @@ export function AdminMasterViews({
                   >
                     <option value="skor">Skala Skor (1–4)</option>
                     <option value="teks">
-                      Manual Teks (Hasil Dialog Refleksi Supervisor &amp; Guru)
+                      Manual Teks (Kondisi Fasilitas / Dialog Refleksi)
                     </option>
                   </select>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Pilih &ldquo;Manual Teks&rdquo; untuk isian naratif hasil dialog refleksi pasca
-                    pelaksanaan supervisi.
+                    Pilih &ldquo;Manual Teks&rdquo; untuk isian naratif kondisi sarpras BK atau
+                    hasil dialog refleksi.
                   </p>
                 </div>
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">

@@ -10,6 +10,7 @@ import type {
   TahapSummary,
   TahapSupervisi,
 } from '../types';
+import { isGuruBK } from '../types';
 
 const DEFAULT_LEFT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 88">
   <path d="M40 4L72 16V44C72 64.5 56.5 78.5 40 84C23.5 78.5 8 64.5 8 44V16L40 4Z" fill="#0F172A" stroke="#B45309" stroke-width="3"/>
@@ -126,16 +127,32 @@ export async function exportSupakPdf(params: {
 
   let y = await drawKopSurat(doc, pengaturan, pageWidth, marginX);
 
+  const isBK = isGuruBK(guru.mataPelajaran);
+
   // Banner SUPAK
   const bannerHeight = 20;
   doc.setFillColor(30, 58, 138);
   doc.roundedRect(marginX, y, pageWidth - marginX * 2, bannerHeight, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('INSTRUMEN SUPERVISI AKADEMIS (SUPAK)', pageWidth / 2, y + 5.5, { align: 'center' });
+  doc.setFontSize(isBK ? 9.2 : 10);
+  doc.text(
+    isBK
+      ? 'INSTRUMEN SUPERVISI ADMINISTRASI BIMBINGAN DAN KONSELING (BK)'
+      : 'INSTRUMEN SUPERVISI AKADEMIS (SUPAK)',
+    pageWidth / 2,
+    y + 5.5,
+    { align: 'center' }
+  );
   doc.setFontSize(9);
-  doc.text('"PENDEKATAN PEMBELAJARAN MENDALAM (PM)"', pageWidth / 2, y + 10, { align: 'center' });
+  doc.text(
+    isBK
+      ? '"LAYANAN BIMBINGAN DAN KONSELING KURIKULUM MERDEKA"'
+      : '"PENDEKATAN PEMBELAJARAN MENDALAM (PM)"',
+    pageWidth / 2,
+    y + 10,
+    { align: 'center' }
+  );
   doc.setTextColor(125, 211, 252);
   doc.setFontSize(8.5);
   doc.text(
@@ -144,12 +161,17 @@ export async function exportSupakPdf(params: {
     y + 14.3,
     { align: 'center' }
   );
-  const stageSubtitle =
-    tahap === 'Persiapan'
-      ? '(PERSIAPAN PEMBELAJARAN)'
+  const stageSubtitle = isBK
+    ? tahap === 'Persiapan'
+      ? '(I. ADMINISTRASI PERENCANAAN PROGRAM BK)'
       : tahap === 'Pelaksanaan'
-      ? '(PELAKSANAAN PEMBELAJARAN)'
-      : '(EVALUASI & DIALOG REFLEKSI PEMBELAJARAN)';
+      ? '(II. ADMINISTRASI PELAKSANAAN LAYANAN BK)'
+      : '(III. EVALUASI & IV. SARANA PRASARANA PENUNJANG BK)'
+    : tahap === 'Persiapan'
+    ? '(PERSIAPAN PEMBELAJARAN)'
+    : tahap === 'Pelaksanaan'
+    ? '(PELAKSANAAN PEMBELAJARAN)'
+    : '(EVALUASI & DIALOG REFLEKSI PEMBELAJARAN)';
   doc.text(stageSubtitle, pageWidth / 2, y + 18.2, { align: 'center' });
 
   y += bannerHeight + 4;
@@ -181,6 +203,8 @@ export async function exportSupakPdf(params: {
   doc.text(
     isTextOnly
       ? 'PETUNJUK: Kolom evaluasi diisi berdasarkan Hasil Dialog Refleksi antara Supervisor dan Guru pasca observasi kelas.'
+      : isBK && summary.mode === 'campuran'
+      ? 'PETUNJUK: Skor 1-4 diisi untuk Evaluasi & Tindak Lanjut; kolom Kondisi diisi (Layak/Tidak atau Ada/Tidak) untuk Sarana Prasarana.'
       : 'PETUNJUK: Skor diisi sesuai skala Kurikulum Merdeka (1 = Kurang, 2 = Cukup, 3 = Baik, 4 = Amat Baik).',
     marginX,
     y
@@ -268,10 +292,15 @@ export async function exportSupakPdf(params: {
         const entry = penilaianMap.get(item.id);
         const skor = entry?.skor || 0;
         if (item.tipePenilaian === 'teks') {
+          const textValue = entry?.teksRefleksi
+            ? isBK
+              ? `Kondisi: ${entry.teksRefleksi}`
+              : entry.teksRefleksi
+            : '-';
           bodyRows.push([
             String(index),
             `${item.aspek}\n${item.kategoriDeskripsi || ''}`.trim(),
-            { content: entry?.teksRefleksi || '-', colSpan: 4 },
+            { content: textValue, colSpan: 4 },
             entry?.catatan || '-',
           ]);
         } else {
@@ -292,6 +321,14 @@ export async function exportSupakPdf(params: {
       });
     });
 
+    const columnHeaderTitle = isBK
+      ? tahap === 'Persiapan'
+        ? 'KOMPONEN ADMINISTRASI PERENCANAAN (PROGRAM)'
+        : tahap === 'Pelaksanaan'
+        ? 'KOMPONEN ADMINISTRASI PELAKSANAAN LAYANAN'
+        : 'KOMPONEN EVALUASI, TINDAK LANJUT & SARPRAS'
+      : `ELEMEN DAN SUB-ELEMEN ${tahap.toUpperCase()} PEMBELAJARAN`;
+
     autoTable(doc, {
       startY: y,
       margin: { left: marginX, right: marginX },
@@ -299,7 +336,7 @@ export async function exportSupakPdf(params: {
         [
           { content: 'NO', rowSpan: 2, styles: { valign: 'middle' } },
           {
-            content: `ELEMEN DAN SUB-ELEMEN ${tahap.toUpperCase()} PEMBELAJARAN`,
+            content: columnHeaderTitle,
             rowSpan: 2,
             styles: { valign: 'middle', halign: 'left' },
           },

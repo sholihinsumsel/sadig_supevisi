@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Lock, CheckCircle2, ExternalLink, Save, AlertCircle, Pencil, RotateCcw } from 'lucide-react';
 import type {
   AppDatabasePayload,
@@ -6,7 +6,7 @@ import type {
   TahapSupervisi,
   UserAccount,
 } from '../types';
-import { SKALA_RUBRIK, hitungPredikat } from '../types';
+import { SKALA_RUBRIK, getAspekForGuru, hitungPredikat, isGuruBK } from '../types';
 import { savePenilaianClient } from '../services/sadigClient';
 
 interface PenilaianFormViewProps {
@@ -47,7 +47,7 @@ export function PenilaianFormView({
   const [saving, setSaving] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
 
-  const aspekList: AspekItem[] =
+  const rawAspekList: AspekItem[] =
     tahap === 'Persiapan'
       ? data.aspekPersiapan
       : tahap === 'Pelaksanaan'
@@ -63,6 +63,11 @@ export function PenilaianFormView({
   }, [initialGuruId, assignedGuru, selectedGuruId]);
 
   const activeGuru = assignedGuru.find((g) => g.id === selectedGuruId) || null;
+  const isBK = isGuruBK(activeGuru?.mataPelajaran);
+  const aspekList = useMemo(
+    () => getAspekForGuru(rawAspekList, tahap, activeGuru?.mataPelajaran),
+    [rawAspekList, tahap, activeGuru?.mataPelajaran]
+  );
 
   const syncFromSavedData = useCallback(() => {
     if (!activeGuru) return;
@@ -142,7 +147,9 @@ export function PenilaianFormView({
 
     for (const a of textAspeks) {
       if (!(reflections[a.id] || '').trim()) {
-        onError(`Hasil Dialog Refleksi untuk aspek "${a.aspek}" wajib diisi.`);
+        onError(
+          `${isBK ? 'Kondisi Fasilitas' : 'Hasil Dialog Refleksi'} untuk aspek "${a.aspek}" wajib diisi.`
+        );
         return;
       }
     }
@@ -194,6 +201,14 @@ export function PenilaianFormView({
               ? 'Penilaian pasca pelaksanaan diisi dengan Hasil Dialog Refleksi antara Supervisor dan Guru dalam bentuk teks.'
               : 'Skala Kurikulum Merdeka: 1 (Kurang), 2 (Cukup), 3 (Baik), 4 (Amat Baik)'}
           </p>
+          {activeGuru && (
+            <p className="text-xs font-semibold text-emerald-700">
+              Instrumen Aktif:{' '}
+              {isBK
+                ? 'Administrasi Bimbingan dan Konseling (BK)'
+                : `Supervisi Akademik (${activeGuru.mataPelajaran})`}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -323,7 +338,9 @@ export function PenilaianFormView({
             <div className="flex flex-wrap items-center gap-5 text-xs font-mono-tabular">
               {hasAnyText && (
                 <div>
-                  <span className="text-slate-500">Dialog Refleksi Terisi: </span>
+                  <span className="text-slate-500">
+                    {isBK ? 'Sarana Terisi: ' : 'Dialog Refleksi Terisi: '}
+                  </span>
                   <strong className="text-emerald-700 text-sm">
                     {filledReflections} / {textAspeks.length}
                   </strong>
@@ -376,7 +393,9 @@ export function PenilaianFormView({
                       {isTextOnly
                         ? 'Hasil Dialog Refleksi (Supervisor & Guru)'
                         : hasAnyText
-                        ? 'Skor (1–4) / Hasil Dialog Refleksi'
+                        ? isBK
+                          ? 'Skor (1–4) / Kondisi Fasilitas'
+                          : 'Skor (1–4) / Hasil Dialog Refleksi'
                         : 'Skor (1–4)'}
                     </th>
                     <th className="py-3 px-4 w-56">Catatan Penilai</th>
@@ -413,7 +432,11 @@ export function PenilaianFormView({
                                   [aspek.id]: e.target.value,
                                 }))
                               }
-                              placeholder="Tuliskan hasil dialog refleksi antara Supervisor dan Guru..."
+                              placeholder={
+                                isBK
+                                  ? 'Tuliskan kondisi fasilitas (Layak/Tidak atau Ada/Tidak) dan keterangan...'
+                                  : 'Tuliskan hasil dialog refleksi antara Supervisor dan Guru...'
+                              }
                               className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                             />
                           ) : (

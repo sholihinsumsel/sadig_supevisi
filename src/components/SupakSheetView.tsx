@@ -8,7 +8,7 @@ import type {
   TahapSupervisi,
   UserAccount,
 } from '../types';
-import { hitungPredikat } from '../types';
+import { getAspekForGuru, hitungPredikat, isGuruBK } from '../types';
 import { KopSurat } from './SchoolCrest';
 import { exportSupakPdf } from '../utils/pdfExport';
 
@@ -46,13 +46,15 @@ export function SupakSheetView({
   }, [initialGuruId, selectableGuru, selectedGuruId]);
 
   const activeGuru = selectableGuru.find((g) => g.id === selectedGuruId) || null;
+  const isBK = isGuruBK(activeGuru?.mataPelajaran);
 
-  const aspekList: AspekItem[] =
+  const rawAspekList: AspekItem[] =
     tahap === 'Persiapan'
       ? data.aspekPersiapan
       : tahap === 'Pelaksanaan'
       ? data.aspekPelaksanaan
       : data.aspekEvaluasi;
+  const aspekList: AspekItem[] = getAspekForGuru(rawAspekList, tahap, activeGuru?.mataPelajaran);
 
   const penilaianMap = new Map<string, PenilaianItem>();
   if (activeGuru) {
@@ -127,19 +129,29 @@ export function SupakSheetView({
     }
   });
 
-  const stageTitle =
-    tahap === 'Persiapan'
-      ? '(PERSIAPAN PEMBELAJARAN)'
+  const stageTitle = isBK
+    ? tahap === 'Persiapan'
+      ? '(I. ADMINISTRASI PERENCANAAN PROGRAM BK)'
       : tahap === 'Pelaksanaan'
-      ? '(PELAKSANAAN PEMBELAJARAN)'
-      : '(EVALUASI & DIALOG REFLEKSI PEMBELAJARAN)';
+      ? '(II. ADMINISTRASI PELAKSANAAN LAYANAN BK)'
+      : '(III. EVALUASI & IV. SARANA PRASARANA PENUNJANG BK)'
+    : tahap === 'Persiapan'
+    ? '(PERSIAPAN PEMBELAJARAN)'
+    : tahap === 'Pelaksanaan'
+    ? '(PELAKSANAAN PEMBELAJARAN)'
+    : '(EVALUASI & DIALOG REFLEKSI PEMBELAJARAN)';
 
-  const columnTitle =
-    tahap === 'Persiapan'
-      ? 'ELEMEN DAN SUB-ELEMEN PERSIAPAN PEMBELAJARAN'
+  const columnTitle = isBK
+    ? tahap === 'Persiapan'
+      ? 'KOMPONEN ADMINISTRASI PERENCANAAN (PROGRAM)'
       : tahap === 'Pelaksanaan'
-      ? 'ELEMEN DAN SUB-ELEMEN PELAKSANAAN PEMBELAJARAN'
-      : 'ELEMEN DAN SUB-ELEMEN EVALUASI PEMBELAJARAN';
+      ? 'KOMPONEN ADMINISTRASI PELAKSANAAN LAYANAN'
+      : 'KOMPONEN EVALUASI, TINDAK LANJUT & SARPRAS'
+    : tahap === 'Persiapan'
+    ? 'ELEMEN DAN SUB-ELEMEN PERSIAPAN PEMBELAJARAN'
+    : tahap === 'Pelaksanaan'
+    ? 'ELEMEN DAN SUB-ELEMEN PELAKSANAAN PEMBELAJARAN'
+    : 'ELEMEN DAN SUB-ELEMEN EVALUASI PEMBELAJARAN';
 
   async function handleDownloadPdf() {
     if (!activeGuru) return;
@@ -219,10 +231,14 @@ export function SupakSheetView({
           {/* BANNER SUPAK */}
           <div className="bg-[#1e3a8a] text-white rounded-xl py-2.5 px-4 text-center mb-4 border border-slate-900">
             <p className="font-extrabold text-sm sm:text-base uppercase tracking-wide">
-              INSTRUMEN SUPERVISI AKADEMIS (SUPAK)
+              {isBK
+                ? 'INSTRUMEN SUPERVISI ADMINISTRASI BIMBINGAN DAN KONSELING (BK)'
+                : 'INSTRUMEN SUPERVISI AKADEMIS (SUPAK)'}
             </p>
             <p className="font-extrabold text-xs sm:text-sm uppercase tracking-wide">
-              &ldquo;PENDEKATAN PEMBELAJARAN MENDALAM (PM)&rdquo;
+              {isBK
+                ? '"LAYANAN BIMBINGAN DAN KONSELING KURIKULUM MERDEKA"'
+                : '"PENDEKATAN PEMBELAJARAN MENDALAM (PM)"'}
             </p>
             <p className="font-bold text-xs sm:text-sm uppercase text-sky-300 mt-0.5">
               SEMESTER {p.semester} TAHUN PELAJARAN {p.tahunPelajaran}
@@ -258,6 +274,8 @@ export function SupakSheetView({
           <p className="text-xs font-bold mb-2">
             {isTextOnly
               ? 'PETUNJUK: Evaluasi pasca pelaksanaan diisi dengan Hasil Dialog Refleksi antara Supervisor dan Guru.'
+              : isBK && mode === 'campuran'
+              ? 'PETUNJUK: Skor 1–4 diisi untuk Evaluasi & Tindak Lanjut; kolom Kondisi diisi (Layak/Tidak atau Ada/Tidak) untuk Sarana Prasarana.'
               : 'PETUNJUK: Kolom skor 1–4 diisi sesuai rubrik Kurikulum Merdeka (1 = Kurang, 2 = Cukup, 3 = Baik, 4 = Amat Baik).'}
           </p>
 
@@ -341,7 +359,7 @@ export function SupakSheetView({
                               className="border border-black py-1.5 px-2.5 text-slate-900"
                             >
                               <span className="font-semibold text-[11px] block">
-                                Dialog Refleksi:
+                                {isBK ? 'Kondisi Fasilitas:' : 'Dialog Refleksi:'}
                               </span>
                               {entry?.teksRefleksi || '-'}
                             </td>

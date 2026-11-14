@@ -7,9 +7,17 @@ import type {
   PengaturanSekolah,
   StatusBerkas,
   TahapSupervisi,
+  TargetMapelAspek,
   TipePenilaianAspek,
   UserAccount,
   UserRole,
+} from '../types';
+import {
+  DEFAULT_BK_ASPEK_EVALUASI,
+  DEFAULT_BK_ASPEK_PELAKSANAAN,
+  DEFAULT_BK_ASPEK_PERSIAPAN,
+  getAspekForGuru,
+  resolveAspekTargetMapel,
 } from '../types';
 import {
   buildRekap,
@@ -23,6 +31,7 @@ import {
   saveGuruFs,
   savePengaturanFs,
   savePenilaianFs,
+  seedBkAspekFs,
   uploadBerkasGuruFs,
   verifikasiKepsekFs,
 } from './firestoreDb';
@@ -39,6 +48,7 @@ import {
   saveGuruSb,
   savePengaturanSb,
   savePenilaianSb,
+  seedBkAspekSb,
   uploadBerkasGuruSb,
   verifikasiKepsekSb,
 } from './supabaseDb';
@@ -85,11 +95,29 @@ export function getCachedBranding(): PublicBranding | null {
 
 type LocalDb = ReturnType<typeof createDefaultSeedData>;
 
+function mergeDefaultBkAspects(db: LocalDb): boolean {
+  let changed = false;
+  const ensureStage = (list: AspekItem[], defaults: AspekItem[]) => {
+    const hasAnyBk = list.some((a) => resolveAspekTargetMapel(a) === 'BK');
+    if (!hasAnyBk) {
+      list.push(...defaults.map((d) => ({ ...d })));
+      changed = true;
+    }
+  };
+  ensureStage(db.aspekPersiapan, DEFAULT_BK_ASPEK_PERSIAPAN);
+  ensureStage(db.aspekPelaksanaan, DEFAULT_BK_ASPEK_PELAKSANAAN);
+  ensureStage(db.aspekEvaluasi, DEFAULT_BK_ASPEK_EVALUASI);
+  return changed;
+}
+
 function loadLocalDb(): LocalDb {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as LocalDb;
+      if (mergeDefaultBkAspects(parsed)) {
+        saveLocalDb(parsed);
+      }
       return parsed;
     }
   } catch {
@@ -483,12 +511,13 @@ export async function savePenilaianClient(params: {
   }
 
   const db = loadLocalDb();
-  const aspekList =
+  const rawAspekList =
     params.tahap === 'Persiapan'
       ? db.aspekPersiapan
       : params.tahap === 'Pelaksanaan'
       ? db.aspekPelaksanaan
       : db.aspekEvaluasi;
+  const aspekList = getAspekForGuru(rawAspekList, params.tahap, params.guru.mataPelajaran);
   db.penilaian = db.penilaian.filter(
     (p) => !(p.nipGuru === params.guru.nip && p.tahap === params.tahap)
   );
@@ -565,6 +594,8 @@ export async function saveAspekClient(
       : tahap === 'Evaluasi'
       ? 'teks'
       : 'skor';
+  const targetMapel: TargetMapelAspek =
+    input.targetMapel === 'BK' || Boolean(input.id && input.id.startsWith('BK_')) ? 'BK' : 'Umum';
   if (input.id) {
     const idx = db[key].findIndex((a) => a.id === input.id);
     if (idx !== -1) {
@@ -574,17 +605,59 @@ export async function saveAspekClient(
         aspek: (input.aspek || '').trim(),
         kategoriDeskripsi: (input.kategoriDeskripsi || '').trim(),
         tipePenilaian: resolvedType,
+        targetMapel,
       };
     }
   } else {
+    const newId =
+      targetMapel === 'BK'
+        ? `BK_${prefix}${Date.now().toString().slice(-4)}`
+        : `${prefix}${Date.now().toString().slice(-4)}`;
     db[key].push({
-      id: `${prefix}${Date.now().toString().slice(-4)}`,
+      id: newId,
       kelompok: (input.kelompok || 'UMUM').trim(),
       aspek: (input.aspek || '').trim(),
       kategoriDeskripsi: (input.kategoriDeskripsi || '').trim(),
       tipePenilaian: resolvedType,
+      targetMapel,
     });
   }
+  saveLocalDb(db);
+  return toPayload(db);
+}
+
+export async function seedBkTemplateClient(
+  existingAllIds: string[],
+  ownerUid: string
+): Promise<AppDatabasePayload | null> {
+  if (auth.currentUser) {
+    await seedBkAspekFs(existingAllIds, ownerUid);
+    return null;
+  }
+  if (isSupabaseConfigured()) {
+    return seedBkAspekSb();
+  }
+  const remote = await tryFetchJson<{ success: boolean; message?: string; data?: AppDatabasePayload }>(
+    '/api/aspek/seed-bk',
+    { method: 'POST' }
+  );
+  if (!remote.networkUnavailable && remote.json) {
+    if (!remote.ok || !remote.json.success) {
+      throw new Error(remote.json.message || 'Gagal memuat template instrumen BK.');
+    }
+    return remote.json.data || null;
+  }
+
+  const db = loadLocalDb();
+  const upsertStage = (list: AspekItem[], defaults: AspekItem[]) => {
+    const ids = new Set(list.map((a) => a.id));
+    defaults.forEach((d) => {
+      if (!ids.has(d.id)) list.push({ ...d });
+    });
+  };
+  upsertStage(db.aspekPersiapan, DEFAULT_BK_ASPEK_PERSIAPAN);
+  upsertStage(db.aspekPelaksanaan, DEFAULT_BK_ASPEK_PELAKSANAAN);
+  upsertStage(db.aspekEvaluasi, DEFAULT_BK_ASPEK_EVALUASI);
   saveLocalDb(db);
   return toPayload(db);
 }

@@ -12,11 +12,19 @@ import type {
   RekapGuru,
   TahapSummary,
   TahapSupervisi,
+  TargetMapelAspek,
   TipePenilaianAspek,
   UserAccount,
   UserRole,
 } from './src/types.ts';
-import { hitungPredikat } from './src/types.ts';
+import {
+  DEFAULT_BK_ASPEK_EVALUASI,
+  DEFAULT_BK_ASPEK_PELAKSANAAN,
+  DEFAULT_BK_ASPEK_PERSIAPAN,
+  getAspekForGuru,
+  hitungPredikat,
+  resolveAspekTargetMapel,
+} from './src/types.ts';
 
 interface SadigDb {
   users: UserAccount[];
@@ -97,6 +105,13 @@ function createSeedDatabase(): SadigDb {
       role: 'Guru',
       nip: '19920618 201903 2 007',
     },
+    {
+      username: 'guru_bk',
+      password: '123',
+      nama: 'Rina Marlina, S.Pd',
+      role: 'Guru',
+      nip: '19910315 201803 2 004',
+    },
   ];
 
   const guru: GuruRecord[] = [
@@ -152,37 +167,53 @@ function createSeedDatabase(): SadigDb {
       linkDriveBerkas: 'https://drive.google.com/file/d/4D5e6F7g8H9iDraftInggris/view',
       catatanKepsek: 'Mohon lengkapi lampiran rubrik asesmen formatif dan LKPD terdiferensiasi pada tautan Drive.',
     },
+    {
+      id: 'G005',
+      nip: '19910315 201803 2 004',
+      namaGuru: 'Rina Marlina, S.Pd',
+      mataPelajaran: 'Bimbingan dan Konseling (BK)',
+      tanggalPelaksanaan: '2026-11-18',
+      supervisor: 'Dra. Hj. Ratna Dewi, M.Pd',
+      nipSupervisor: '19750820 200212 2 003',
+      statusBerkas: 'Disetujui',
+      kelengkapanBerkas: 'Ada',
+      linkDriveBerkas: 'https://drive.google.com/drive/folders/5E6f7G8h9I0jAdministrasiBK',
+      catatanKepsek: 'Perangkat administrasi BK (AKPD/AUM, Prota, Promes, RPL) disetujui untuk supervisi.',
+    },
   ];
 
   const aspekPersiapan: AspekItem[] = [
-    { id: 'P1', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Identitas Modul Ajar / Perangkat Pembelajaran', kategoriDeskripsi: 'Mencantumkan satuan pendidikan, mata pelajaran, fase/kelas, semester, dan alokasi waktu.', tipePenilaian: 'skor' },
-    { id: 'P2', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Identifikasi Kesiapan Peserta Didik', kategoriDeskripsi: 'Memetakan kesiapan belajar, minat, dan profil belajar murid berbasis asesmen diagnostik.', tipePenilaian: 'skor' },
-    { id: 'P3', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Dimensi Profil Lulusan / Profil Pelajar Pancasila', kategoriDeskripsi: 'Menentukan dimensi karakter yang relevan dan terintegrasi pada tujuan pembelajaran.', tipePenilaian: 'skor' },
-    { id: 'P4', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Perumusan CP, TP, dan Alur Tujuan Pembelajaran (ATP)', kategoriDeskripsi: 'Tujuan pembelajaran terukur, selaras dengan Capaian Pembelajaran fase terkini.', tipePenilaian: 'skor' },
-    { id: 'P5', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Pemilihan Model & Pedagogi Pembelajaran Mendalam', kategoriDeskripsi: 'Merancang pengalaman belajar memahami, mengaplikasikan, dan merefleksikan materi.', tipePenilaian: 'skor' },
-    { id: 'P6', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Langkah Pembelajaran Berdiferensiasi', kategoriDeskripsi: 'Kegiatan pendahuluan, inti, dan penutup mengakomodasi kebutuhan belajar beragam.', tipePenilaian: 'skor' },
-    { id: 'P7', kelompok: 'III. ASESMEN & SUMBER BELAJAR', aspek: 'Rancangan Asesmen Awal, Formatif, dan Sumatif', kategoriDeskripsi: 'Tersedia instrumen dan rubrik penilaian autentik yang terukur dan objektif.', tipePenilaian: 'skor' },
-    { id: 'P8', kelompok: 'III. ASESMEN & SUMBER BELAJAR', aspek: 'Media Digital, LKPD, dan Bahan Ajar Kontekstual', kategoriDeskripsi: 'Melampirkan LKPD, bahan bacaan relevan, dan pemanfaatan media pembelajaran digital.', tipePenilaian: 'skor' },
+    { id: 'P1', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Identitas Modul Ajar / Perangkat Pembelajaran', kategoriDeskripsi: 'Mencantumkan satuan pendidikan, mata pelajaran, fase/kelas, semester, dan alokasi waktu.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P2', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Identifikasi Kesiapan Peserta Didik', kategoriDeskripsi: 'Memetakan kesiapan belajar, minat, dan profil belajar murid berbasis asesmen diagnostik.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P3', kelompok: 'I. IDENTITAS & CAPAIAN', aspek: 'Dimensi Profil Lulusan / Profil Pelajar Pancasila', kategoriDeskripsi: 'Menentukan dimensi karakter yang relevan dan terintegrasi pada tujuan pembelajaran.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P4', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Perumusan CP, TP, dan Alur Tujuan Pembelajaran (ATP)', kategoriDeskripsi: 'Tujuan pembelajaran terukur, selaras dengan Capaian Pembelajaran fase terkini.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P5', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Pemilihan Model & Pedagogi Pembelajaran Mendalam', kategoriDeskripsi: 'Merancang pengalaman belajar memahami, mengaplikasikan, dan merefleksikan materi.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P6', kelompok: 'II. DESAIN PEMBELAJARAN', aspek: 'Langkah Pembelajaran Berdiferensiasi', kategoriDeskripsi: 'Kegiatan pendahuluan, inti, dan penutup mengakomodasi kebutuhan belajar beragam.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P7', kelompok: 'III. ASESMEN & SUMBER BELAJAR', aspek: 'Rancangan Asesmen Awal, Formatif, dan Sumatif', kategoriDeskripsi: 'Tersedia instrumen dan rubrik penilaian autentik yang terukur dan objektif.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'P8', kelompok: 'III. ASESMEN & SUMBER BELAJAR', aspek: 'Media Digital, LKPD, dan Bahan Ajar Kontekstual', kategoriDeskripsi: 'Melampirkan LKPD, bahan bacaan relevan, dan pemanfaatan media pembelajaran digital.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    ...DEFAULT_BK_ASPEK_PERSIAPAN.map((a) => ({ ...a })),
   ];
 
   const aspekPelaksanaan: AspekItem[] = [
-    { id: 'L1', kelompok: 'I. KEGIATAN PENDAHULUAN', aspek: 'Pengondisian Kelas & Kesepakatan Belajar', kategoriDeskripsi: 'Menciptakan suasana aman, nyaman, berdoa, dan menegakkan kesepakatan kelas positif.', tipePenilaian: 'skor' },
-    { id: 'L2', kelompok: 'I. KEGIATAN PENDAHULUAN', aspek: 'Apersepsi, Motivasi & Penyampaian Tujuan', kategoriDeskripsi: 'Mengaitkan materi dengan pengalaman nyata murid dan menyampaikan tujuan pembelajaran.', tipePenilaian: 'skor' },
-    { id: 'L3', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Penguasaan Materi & Pertanyaan Pemantik Kritis', kategoriDeskripsi: 'Menyajikan materi terstruktur dengan pertanyaan pemantik yang merangsang nalar kritis.', tipePenilaian: 'skor' },
-    { id: 'L4', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Fasilitasi Kolaborasi & Diferensiasi Proses', kategoriDeskripsi: 'Mendampingi kelompok belajar secara adil dan adaptif sesuai kebutuhan murid.', tipePenilaian: 'skor' },
-    { id: 'L5', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Pemanfaatan Teknologi & Media Interaktif', kategoriDeskripsi: 'Menggunakan perangkat digital/alat peraga secara efektif untuk memperjelas konsep.', tipePenilaian: 'skor' },
-    { id: 'L6', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Asesmen Formatif & Umpan Balik Konstruktif', kategoriDeskripsi: 'Memantau proses belajar murid dan memberi umpan balik langsung yang membangun.', tipePenilaian: 'skor' },
-    { id: 'L7', kelompok: 'III. KEGIATAN PENUTUP', aspek: 'Penyimpulan Bersama & Refleksi Pembelajaran', kategoriDeskripsi: 'Melibatkan murid menyimpulkan inti materi dan merefleksikan pengalaman belajar.', tipePenilaian: 'skor' },
-    { id: 'L8', kelompok: 'III. KEGIATAN PENUTUP', aspek: 'Asesmen Akhir & Tindak Lanjut Pertemuan', kategoriDeskripsi: 'Melakukan pengecekan ketercapaian tujuan dan menginformasikan rencana pertemuan berikutnya.', tipePenilaian: 'skor' },
+    { id: 'L1', kelompok: 'I. KEGIATAN PENDAHULUAN', aspek: 'Pengondisian Kelas & Kesepakatan Belajar', kategoriDeskripsi: 'Menciptakan suasana aman, nyaman, berdoa, dan menegakkan kesepakatan kelas positif.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L2', kelompok: 'I. KEGIATAN PENDAHULUAN', aspek: 'Apersepsi, Motivasi & Penyampaian Tujuan', kategoriDeskripsi: 'Mengaitkan materi dengan pengalaman nyata murid dan menyampaikan tujuan pembelajaran.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L3', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Penguasaan Materi & Pertanyaan Pemantik Kritis', kategoriDeskripsi: 'Menyajikan materi terstruktur dengan pertanyaan pemantik yang merangsang nalar kritis.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L4', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Fasilitasi Kolaborasi & Diferensiasi Proses', kategoriDeskripsi: 'Mendampingi kelompok belajar secara adil dan adaptif sesuai kebutuhan murid.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L5', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Pemanfaatan Teknologi & Media Interaktif', kategoriDeskripsi: 'Menggunakan perangkat digital/alat peraga secara efektif untuk memperjelas konsep.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L6', kelompok: 'II. KEGIATAN INTI (PEMBELAJARAN MENDALAM)', aspek: 'Asesmen Formatif & Umpan Balik Konstruktif', kategoriDeskripsi: 'Memantau proses belajar murid dan memberi umpan balik langsung yang membangun.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L7', kelompok: 'III. KEGIATAN PENUTUP', aspek: 'Penyimpulan Bersama & Refleksi Pembelajaran', kategoriDeskripsi: 'Melibatkan murid menyimpulkan inti materi dan merefleksikan pengalaman belajar.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    { id: 'L8', kelompok: 'III. KEGIATAN PENUTUP', aspek: 'Asesmen Akhir & Tindak Lanjut Pertemuan', kategoriDeskripsi: 'Melakukan pengecekan ketercapaian tujuan dan menginformasikan rencana pertemuan berikutnya.', tipePenilaian: 'skor', targetMapel: 'Umum' },
+    ...DEFAULT_BK_ASPEK_PELAKSANAAN.map((a) => ({ ...a })),
   ];
 
   const aspekEvaluasi: AspekItem[] = [
-    { id: 'E1', kelompok: 'I. ANALISIS HASIL ASESMEN', aspek: 'Rekapitulasi & Analisis Ketuntasan Hasil Belajar', kategoriDeskripsi: 'Dialog refleksi bersama guru mengenai capaian asesmen formatif/sumatif murid.', tipePenilaian: 'teks' },
-    { id: 'E2', kelompok: 'I. ANALISIS HASIL ASESMEN', aspek: 'Identifikasi Butir Soal / Indikator Belum Tuntas', kategoriDeskripsi: 'Dialog mengenai materi esensial yang masih mengalami miskonsepsi atau di bawah KKTP.', tipePenilaian: 'teks' },
-    { id: 'E3', kelompok: 'II. PROGRAM TINDAK LANJUT', aspek: 'Pelaksanaan Program Remedial Terstruktur', kategoriDeskripsi: 'Kesepakatan strategi pendampingan ulang bagi murid yang belum mencapai tujuan.', tipePenilaian: 'teks' },
-    { id: 'E4', kelompok: 'II. PROGRAM TINDAK LANJUT', aspek: 'Pelaksanaan Program Pengayaan & Tantangan Lanjut', kategoriDeskripsi: 'Umpan balik atas tugas pengayaan kontekstual bagi murid yang melampaui capaian.', tipePenilaian: 'teks' },
-    { id: 'E5', kelompok: 'III. REFLEKSI & PELAPORAN', aspek: 'Refleksi Profesional Guru atas Efektivitas Mengajar', kategoriDeskripsi: 'Hasil dialog kekuatan mengajar, kendala kelas, dan perbaikan strategi pedagogis.', tipePenilaian: 'teks' },
-    { id: 'E6', kelompok: 'III. REFLEKSI & PELAPORAN', aspek: 'Dokumentasi Portofolio & Pelaporan Berkala', kategoriDeskripsi: 'Catatan kelengkapan portofolio murid dan penyampaian progres ke orang tua/sekolah.', tipePenilaian: 'teks' },
+    { id: 'E1', kelompok: 'I. ANALISIS HASIL ASESMEN', aspek: 'Rekapitulasi & Analisis Ketuntasan Hasil Belajar', kategoriDeskripsi: 'Dialog refleksi bersama guru mengenai capaian asesmen formatif/sumatif murid.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    { id: 'E2', kelompok: 'I. ANALISIS HASIL ASESMEN', aspek: 'Identifikasi Butir Soal / Indikator Belum Tuntas', kategoriDeskripsi: 'Dialog mengenai materi esensial yang masih mengalami miskonsepsi atau di bawah KKTP.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    { id: 'E3', kelompok: 'II. PROGRAM TINDAK LANJUT', aspek: 'Pelaksanaan Program Remedial Terstruktur', kategoriDeskripsi: 'Kesepakatan strategi pendampingan ulang bagi murid yang belum mencapai tujuan.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    { id: 'E4', kelompok: 'II. PROGRAM TINDAK LANJUT', aspek: 'Pelaksanaan Program Pengayaan & Tantangan Lanjut', kategoriDeskripsi: 'Umpan balik atas tugas pengayaan kontekstual bagi murid yang melampaui capaian.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    { id: 'E5', kelompok: 'III. REFLEKSI & PELAPORAN', aspek: 'Refleksi Profesional Guru atas Efektivitas Mengajar', kategoriDeskripsi: 'Hasil dialog kekuatan mengajar, kendala kelas, dan perbaikan strategi pedagogis.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    { id: 'E6', kelompok: 'III. REFLEKSI & PELAPORAN', aspek: 'Dokumentasi Portofolio & Pelaporan Berkala', kategoriDeskripsi: 'Catatan kelengkapan portofolio murid dan penyampaian progres ke orang tua/sekolah.', tipePenilaian: 'teks', targetMapel: 'Umum' },
+    ...DEFAULT_BK_ASPEK_EVALUASI.map((a) => ({ ...a })),
   ];
 
   const penilaian: PenilaianItem[] = [
@@ -370,15 +401,44 @@ function loadDb(): SadigDb {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const parsed = JSON.parse(raw) as SadigDb;
     // Ensure newer fields exist cleanly if loading existing DB
+    parsed.aspekPersiapan = parsed.aspekPersiapan.map((a) => ({
+      ...a,
+      tipePenilaian: a.tipePenilaian || 'skor',
+      targetMapel: resolveAspekTargetMapel(a),
+    }));
+    parsed.aspekPelaksanaan = parsed.aspekPelaksanaan.map((a) => ({
+      ...a,
+      tipePenilaian: a.tipePenilaian || 'skor',
+      targetMapel: resolveAspekTargetMapel(a),
+    }));
     parsed.aspekEvaluasi = parsed.aspekEvaluasi.map((a) => ({
       ...a,
       tipePenilaian: a.tipePenilaian || 'teks',
+      targetMapel: resolveAspekTargetMapel(a),
     }));
+
+    let migrated = false;
+    if (!parsed.aspekPersiapan.some((a) => resolveAspekTargetMapel(a) === 'BK')) {
+      parsed.aspekPersiapan.push(...DEFAULT_BK_ASPEK_PERSIAPAN.map((a) => ({ ...a })));
+      migrated = true;
+    }
+    if (!parsed.aspekPelaksanaan.some((a) => resolveAspekTargetMapel(a) === 'BK')) {
+      parsed.aspekPelaksanaan.push(...DEFAULT_BK_ASPEK_PELAKSANAAN.map((a) => ({ ...a })));
+      migrated = true;
+    }
+    if (!parsed.aspekEvaluasi.some((a) => resolveAspekTargetMapel(a) === 'BK')) {
+      parsed.aspekEvaluasi.push(...DEFAULT_BK_ASPEK_EVALUASI.map((a) => ({ ...a })));
+      migrated = true;
+    }
+
     parsed.pengaturan = {
       logoKiri: '',
       logoKanan: '',
       ...parsed.pengaturan,
     };
+    if (migrated) {
+      saveDb(parsed);
+    }
     return parsed;
   } catch {
     const seed = createSeedDatabase();
@@ -451,9 +511,13 @@ function computeTahapSummary(
 
 function buildRekap(db: SadigDb): RekapGuru[] {
   return db.guru.map((g) => {
-    const persiapan = computeTahapSummary(g.nip, 'Persiapan', db.aspekPersiapan, db.penilaian);
-    const pelaksanaan = computeTahapSummary(g.nip, 'Pelaksanaan', db.aspekPelaksanaan, db.penilaian);
-    const evaluasi = computeTahapSummary(g.nip, 'Evaluasi', db.aspekEvaluasi, db.penilaian);
+    const persiapanList = getAspekForGuru(db.aspekPersiapan, 'Persiapan', g.mataPelajaran);
+    const pelaksanaanList = getAspekForGuru(db.aspekPelaksanaan, 'Pelaksanaan', g.mataPelajaran);
+    const evaluasiList = getAspekForGuru(db.aspekEvaluasi, 'Evaluasi', g.mataPelajaran);
+
+    const persiapan = computeTahapSummary(g.nip, 'Persiapan', persiapanList, db.penilaian);
+    const pelaksanaan = computeTahapSummary(g.nip, 'Pelaksanaan', pelaksanaanList, db.penilaian);
+    const evaluasi = computeTahapSummary(g.nip, 'Evaluasi', evaluasiList, db.penilaian);
 
     const availableScores = [persiapan.nilai, pelaksanaan.nilai, evaluasi.nilai].filter(
       (n): n is number => n !== null
@@ -735,12 +799,13 @@ async function startServer() {
       return;
     }
 
-    const aspekList =
+    const rawAspekList =
       tahap === 'Persiapan'
         ? db.aspekPersiapan
         : tahap === 'Pelaksanaan'
         ? db.aspekPelaksanaan
         : db.aspekEvaluasi;
+    const aspekList = getAspekForGuru(rawAspekList, tahap, guru.mataPelajaran);
 
     for (const item of items) {
       const def = aspekList.find((a) => a.id === item.idAspek);
@@ -797,9 +862,25 @@ async function startServer() {
     });
   });
 
+  app.post('/api/aspek/seed-bk', (_req, res) => {
+    const db = loadDb();
+    const upsertStage = (list: AspekItem[], defaults: AspekItem[]) => {
+      const ids = new Set(list.map((a) => a.id));
+      defaults.forEach((d) => {
+        if (!ids.has(d.id)) list.push({ ...d });
+      });
+    };
+    upsertStage(db.aspekPersiapan, DEFAULT_BK_ASPEK_PERSIAPAN);
+    upsertStage(db.aspekPelaksanaan, DEFAULT_BK_ASPEK_PELAKSANAAN);
+    upsertStage(db.aspekEvaluasi, DEFAULT_BK_ASPEK_EVALUASI);
+    saveDb(db);
+    res.json({ success: true, message: 'Template instrumen BK berhasil dimuat.', data: buildPayload(db) });
+  });
+
   app.post('/api/aspek/:tahap', (req, res) => {
     const tahap = req.params.tahap as TahapSupervisi;
-    const { id, kelompok, aspek, kategoriDeskripsi, tipePenilaian } = req.body as Partial<AspekItem>;
+    const { id, kelompok, aspek, kategoriDeskripsi, tipePenilaian, targetMapel } =
+      req.body as Partial<AspekItem>;
     if (!aspek?.trim()) {
       res.status(400).json({ success: false, message: 'Nama aspek penilaian wajib diisi.' });
       return;
@@ -818,6 +899,8 @@ async function startServer() {
         : tahap === 'Evaluasi'
         ? 'teks'
         : 'skor';
+    const resolvedTarget: TargetMapelAspek =
+      targetMapel === 'BK' || Boolean(id && id.startsWith('BK_')) ? 'BK' : 'Umum';
 
     if (id) {
       const idx = db[key].findIndex((a) => a.id === id);
@@ -831,15 +914,20 @@ async function startServer() {
         aspek: aspek.trim(),
         kategoriDeskripsi: kategoriDeskripsi?.trim() || '',
         tipePenilaian: resolvedType,
+        targetMapel: resolvedTarget,
       };
     } else {
-      const newId = `${prefix}${Date.now().toString().slice(-4)}`;
+      const newId =
+        resolvedTarget === 'BK'
+          ? `BK_${prefix}${Date.now().toString().slice(-4)}`
+          : `${prefix}${Date.now().toString().slice(-4)}`;
       db[key].push({
         id: newId,
         kelompok: kelompok?.trim() || 'UMUM',
         aspek: aspek.trim(),
         kategoriDeskripsi: kategoriDeskripsi?.trim() || '',
         tipePenilaian: resolvedType,
+        targetMapel: resolvedTarget,
       });
     }
     saveDb(db);
